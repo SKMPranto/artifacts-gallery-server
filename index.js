@@ -3,15 +3,14 @@ const cors = require("cors");
 const app = express();
 const port = process.env.PORT || 3000;
 require("dotenv").config();
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
 // Database connection
-const uri =
-  `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster01.gad8k91.mongodb.net/?retryWrites=true&w=majority&appName=Cluster01`;
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster01.gad8k91.mongodb.net/?retryWrites=true&w=majority&appName=Cluster01`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -27,26 +26,45 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
 
-    const artifactsCollection = client.db("artifactsDB").collection("artifacts");
+    const artifactsCollection = client
+      .db("artifactsDB")
+      .collection("artifacts");
 
     // Define routes for CRUD operations
 
     // Create (POST)
-    app.post("/artifacts", async (req,res)=>{
-        const newArtifact = req.body;
-        const result = await artifactsCollection.insertOne(newArtifact);
-        res.send(result);
+    app.post("/artifacts", async (req, res) => {
+      const newArtifact = req.body;
+      const result = await artifactsCollection.insertOne(newArtifact);
+      res.send(result);
     });
 
     // Read (GET)
-app.get("/artifacts", async (req,res)=>{
-  const artifacts = await artifactsCollection.find().toArray();
-  res.send(artifacts);
-})
+    app.get("/artifacts", async (req, res) => {
+      const email = req.query.email;
+      const query = {};
+      if (email) {
+        query.email = email;
+      }
+      const artifacts = await artifactsCollection.find(query).toArray();
+      res.send(artifacts);
+    });
 
+    // Read single artifact (GET)
+    app.get("/artifacts/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const artifact = await artifactsCollection.findOne(query);
+      res.send(artifact);
+    });
 
-
-
+    // Read Artifacts Added by user
+    app.get("/artifacts/:email", async (req, res) => {
+      const email = req.query.email;
+      const query = { email: email };
+      const artifacts = await artifactsCollection.find(query).toArray();
+      res.send(artifacts);
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
