@@ -38,6 +38,11 @@ async function run() {
         res.send(result);
     });
 
+    // Read (GET)
+app.get("/artifacts", async (req,res)=>{
+  const artifacts = await artifactsCollection.find().toArray();
+  res.send(artifacts);
+})
 
 
 
