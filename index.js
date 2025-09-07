@@ -9,7 +9,7 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 app.use(cors());
 app.use(express.json());
 
-// Database connection
+// MongoDB connection
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster01.gad8k91.mongodb.net/?retryWrites=true&w=majority&appName=Cluster01`;
 const client = new MongoClient(uri, {
   serverApi: {
@@ -33,7 +33,7 @@ async function run() {
       res.send(result);
     });
 
-    // Get all artifacts or by email
+    // Get all artifacts
     app.get("/artifacts", async (req, res) => {
       const email = req.query.email;
       const query = {};
@@ -45,7 +45,7 @@ async function run() {
     // Get single artifact with user like info
     app.get("/artifacts/:id", async (req, res) => {
       const id = req.params.id;
-      const userEmail = req.query.email; // current user
+      const userEmail = req.query.email;
       const artifact = await artifactsCollection.findOne({
         _id: new ObjectId(id),
       });
@@ -67,7 +67,7 @@ async function run() {
       res.send(result);
     });
 
-    // Like/Dislike an artifact
+    // Like/unlike artifact
     app.patch("/artifacts/:id/like", async (req, res) => {
       try {
         const id = req.params.id;
@@ -103,9 +103,35 @@ async function run() {
       }
     });
 
-    // Ping to check connection
-    await client.db("admin").command({ ping: 1 });
-    console.log("Connected to MongoDB!");
+    // Get all liked artifacts by user
+    app.get("/artifacts/liked", async (req, res) => {
+      try {
+        const userEmail = req.query.email;
+        if (!userEmail)
+          return res
+            .status(400)
+            .send({ message: "Email query parameter is required" });
+
+        const artifacts = await artifactsCollection
+          .find({ likedBy: { $in: [userEmail] } })
+          .toArray();
+        res.send(artifacts);
+      } catch (error) {
+        console.error("Failed to fetch liked artifacts:", error);
+        res.status(500).send({ message: "Server error" });
+      }
+    });
+
+    // DELETE method
+    // Delete artifact
+    app.delete("/artifacts/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await artifactsCollection.deleteOne(query);
+      res.send(result);
+    });
+
+    // console.log("Connected to MongoDB!");
   } finally {
     // Keep connection open
   }
