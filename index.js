@@ -25,26 +25,15 @@ async function run() {
     await client.connect();
     const artifactsCollection = client.db("artifactsDB").collection("artifacts");
 
-    // Create artifact
-    app.post("/artifacts", async (req, res) => {
-      const { artifactName, artifactImage, shortDescription, userEmail } = req.body;
-      if (!userEmail) return res.status(400).send({ message: "userEmail is required" });
-
-      const newArtifact = {
-        artifactName,
-        artifactImage,
-        shortDescription,
-        userEmail,
-        likes: 0,
-        likedBy: [],
-        createdAt: new Date(),
-      };
-
-      const result = await artifactsCollection.insertOne(newArtifact);
+    // // Create artifact
+        app.post("/artifacts", async (req, res) => {
+      const newPlant = req.body;
+      const result = await artifactsCollection.insertOne(newPlant);
       res.send(result);
     });
 
-    // Get all artifacts (DO NOT CHANGE)
+
+    // Get all artifacts
     app.get("/artifacts", async (req, res) => {
       const email = req.query.email;
       const query = {};
@@ -53,7 +42,7 @@ async function run() {
       res.send(artifacts);
     });
 
-    // ✅ Get all liked artifacts by user
+    //Get all liked artifacts by user
     app.get("/artifacts/liked", async (req, res) => {
       try {
         const userEmail = req.query.email;
