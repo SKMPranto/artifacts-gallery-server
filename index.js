@@ -1,9 +1,10 @@
 const express = require("express");
 const cors = require("cors");
-const app = express();
-const port = process.env.PORT || 3000;
 require("dotenv").config();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+
+const app = express();
+const port = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
@@ -22,18 +23,28 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     await client.connect();
-    const artifactsCollection = client
-      .db("artifactsDB")
-      .collection("artifacts");
+    const artifactsCollection = client.db("artifactsDB").collection("artifacts");
 
     // Create artifact
     app.post("/artifacts", async (req, res) => {
-      const newArtifact = { ...req.body, likes: 0, likedBy: [] };
+      const { artifactName, artifactImage, shortDescription, userEmail } = req.body;
+      if (!userEmail) return res.status(400).send({ message: "userEmail is required" });
+
+      const newArtifact = {
+        artifactName,
+        artifactImage,
+        shortDescription,
+        userEmail,
+        likes: 0,
+        likedBy: [],
+        createdAt: new Date(),
+      };
+
       const result = await artifactsCollection.insertOne(newArtifact);
       res.send(result);
     });
 
-    // Get all artifacts
+    // Get all artifacts (DO NOT CHANGE)
     app.get("/artifacts", async (req, res) => {
       const email = req.query.email;
       const query = {};
@@ -42,29 +53,35 @@ async function run() {
       res.send(artifacts);
     });
 
-    // Get single artifact with user like info
+    // ✅ Get all liked artifacts by user
+    app.get("/artifacts/liked", async (req, res) => {
+      try {
+        const userEmail = req.query.email;
+        if (!userEmail) return res.status(400).send([]);
+
+        const artifacts = await artifactsCollection
+          .find({ likedBy: { $in: [userEmail] } })
+          .toArray();
+
+        res.send(Array.isArray(artifacts) ? artifacts : []);
+      } catch (error) {
+        console.error("Failed to fetch liked artifacts:", error);
+        res.status(500).send([]);
+      }
+    });
+
+    // Get single artifact
     app.get("/artifacts/:id", async (req, res) => {
       const id = req.params.id;
       const userEmail = req.query.email;
-      const artifact = await artifactsCollection.findOne({
-        _id: new ObjectId(id),
-      });
-      if (!artifact)
-        return res.status(404).send({ message: "Artifact not found" });
-
-      const isLiked = artifact.likedBy?.includes(userEmail) || false;
-      res.send({ ...artifact, isLiked });
-    });
-
-    // Update artifact
-    app.put("/artifacts/:id", async (req, res) => {
-      const id = req.params.id;
-      const filter = { _id: new ObjectId(id) };
-      const updateDoc = { $set: req.body };
-      const result = await artifactsCollection.updateOne(filter, updateDoc, {
-        upsert: true,
-      });
-      res.send(result);
+      try {
+        const artifact = await artifactsCollection.findOne({ _id: new ObjectId(id) });
+        if (!artifact) return res.status(404).send({ message: "Artifact not found" });
+        const isLiked = artifact.likedBy?.includes(userEmail) || false;
+        res.send({ ...artifact, isLiked });
+      } catch (error) {
+        res.status(500).send({ message: "Server error" });
+      }
     });
 
     // Like/unlike artifact
@@ -73,73 +90,48 @@ async function run() {
         const id = req.params.id;
         const { liked, email } = req.body;
         const filter = { _id: new ObjectId(id) };
-
         const artifact = await artifactsCollection.findOne(filter);
-        if (!artifact)
-          return res.status(404).send({ message: "Artifact not found" });
+        if (!artifact) return res.status(404).send({ message: "Artifact not found" });
 
         let likes = artifact.likes || 0;
         let likedBy = artifact.likedBy || [];
 
-        if (liked) {
-          if (!likedBy.includes(email)) {
-            likedBy.push(email);
-            likes++;
-          }
-        } else {
-          if (likedBy.includes(email)) {
-            likedBy = likedBy.filter((e) => e !== email);
-            likes = Math.max(likes - 1, 0);
-          }
+        if (liked && !likedBy.includes(email)) {
+          likedBy.push(email);
+          likes++;
+        } else if (!liked && likedBy.includes(email)) {
+          likedBy = likedBy.filter((e) => e !== email);
+          likes = Math.max(likes - 1, 0);
         }
 
-        await artifactsCollection.updateOne(filter, {
-          $set: { likes, likedBy },
-        });
-        res.send({ likes, likedBy });
+        await artifactsCollection.updateOne(filter, { $set: { likes, likedBy } });
+        res.send({ likes, isLiked: likedBy.includes(email) });
       } catch (error) {
         console.error(error);
         res.status(500).send({ message: "Server error" });
       }
     });
 
-    // Get all liked artifacts by user
-    app.get("/artifacts/liked", async (req, res) => {
+    // Delete artifact
+    app.delete("/artifacts/:id", async (req, res) => {
       try {
-        const userEmail = req.query.email;
-        if (!userEmail)
-          return res
-            .status(400)
-            .send({ message: "Email query parameter is required" });
-
-        const artifacts = await artifactsCollection
-          .find({ likedBy: { $in: [userEmail] } })
-          .toArray();
-        res.send(artifacts);
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const result = await artifactsCollection.deleteOne(query);
+        res.send(result);
       } catch (error) {
-        console.error("Failed to fetch liked artifacts:", error);
         res.status(500).send({ message: "Server error" });
       }
     });
-
-    // DELETE method
-    // Delete artifact
-    app.delete("/artifacts/:id", async (req, res) => {
-      const id = req.params.id;
-      const query = { _id: new ObjectId(id) };
-      const result = await artifactsCollection.deleteOne(query);
-      res.send(result);
-    });
-
-    // console.log("Connected to MongoDB!");
   } finally {
-    // Keep connection open
+    // Keep connection alive
   }
 }
 run().catch(console.dir);
 
+// Default route
 app.get("/", (req, res) => {
-  res.send("Artifacts Gallery Server is connected");
+  res.send("Artifacts Gallery Server is running 🚀");
 });
 
 app.listen(port, () => {
