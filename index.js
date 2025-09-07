@@ -1,6 +1,6 @@
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-require("dotenv").config();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 const app = express();
@@ -20,6 +20,32 @@ const client = new MongoClient(uri, {
   },
 });
 
+// -------------------------
+const admin = require("firebase-admin");
+const serviceAccount = require("./artifacts-gallery-firebase-admin-service-key.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
+
+// Verify the FireBase Token
+const verifyFirebaseToken = async (req, res, next) => {
+  const authHeader = req.headers?.authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+
+  const Token = authHeader.split(" ")[1];
+  try {
+    const verifyToken = await admin.auth().verifyIdToken(Token);
+    req.verifyToken = verifyToken;
+    next();
+  } catch (err) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+};
+
 async function run() {
   try {
     await client.connect();
@@ -37,16 +63,30 @@ async function run() {
     // Get all artifacts
     app.get("/artifacts", async (req, res) => {
       const email = req.query.email;
-      const query = {};
-      if (email) query.email = email;
-      const artifacts = await artifactsCollection.find(query).toArray();
+
+      // If email is given, enforce Firebase token check
+      if (email) {
+        return verifyFirebaseToken(req, res, async () => {
+          if (email !== req.verifyToken.email) {
+            return res.status(403).send({ message: "forbidden access" });
+          }
+          const artifacts = await artifactsCollection.find({ email }).toArray();
+          return res.send(artifacts);
+        });
+      }
+
+      // No email → return all artifacts (public)
+      const artifacts = await artifactsCollection.find({}).toArray();
       res.send(artifacts);
     });
 
     //Get all liked artifacts by user
-    app.get("/artifacts/liked", async (req, res) => {
+    app.get("/artifacts/liked",verifyFirebaseToken, async (req, res) => {
       try {
         const userEmail = req.query.email;
+        if(userEmail !== req.verifyToken.email){
+          return res.status(403).message({message:'forbidden access'})
+        }
         if (!userEmail) return res.status(400).send([]);
 
         const artifacts = await artifactsCollection
