@@ -1,2 +1,4 @@
 node_modules
 .env
+.vercel
+artifacts-gallery-firebase-admin-service-key.json

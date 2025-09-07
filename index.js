@@ -22,7 +22,9 @@ const client = new MongoClient(uri, {
 
 // -------------------------
 const admin = require("firebase-admin");
-const serviceAccount = require("./artifacts-gallery-firebase-admin-service-key.json");
+
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
+const serviceAccount = JSON.parse(decoded);
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
